@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { authenticateJWT } from '../middleware/auth.middleware.js';
+import { authenticateJWT, requireAuth } from '../middleware/auth.middleware.js';
 import * as rssController from '../controllers/rss.controller.js';
 
 const router = Router();
 
-router.use(authenticateJWT);
+router.use(authenticateJWT, requireAuth);
 
 router.get('/', rssController.listRssFeeds);
 router.post('/', rssController.createRssFeed);

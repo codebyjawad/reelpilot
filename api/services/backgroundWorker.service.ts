@@ -9,6 +9,7 @@ export interface BackgroundWorkerStats {
   totalTicks: number;
   reelsProcessedCount: number;
   rssFeedsSyncedCount: number;
+  viralSourcesSyncedCount: number;
   autoRetriesCount: number;
   pendingQueueCount: number;
   uptimeSeconds: number;
@@ -19,13 +20,15 @@ let lastTickTime: string | null = null;
 let totalTicks = 0;
 let reelsProcessedCount = 0;
 let rssFeedsSyncedCount = 0;
+let viralSourcesSyncedCount = 0;
 let autoRetriesCount = 0;
 
-export const recordTick = (processedReels: number, syncedRss: number, retried: number): void => {
+export const recordTick = (processedReels: number, syncedRss: number, retried: number, syncedViral: number = 0): void => {
   totalTicks++;
   lastTickTime = new Date().toISOString();
   reelsProcessedCount += processedReels;
   rssFeedsSyncedCount += syncedRss;
+  viralSourcesSyncedCount += syncedViral;
   autoRetriesCount += retried;
 };
 
@@ -47,6 +50,7 @@ export const getWorkerStatus = async (): Promise<BackgroundWorkerStats> => {
     totalTicks,
     reelsProcessedCount,
     rssFeedsSyncedCount,
+    viralSourcesSyncedCount,
     autoRetriesCount,
     pendingQueueCount,
     uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),

@@ -20,6 +20,8 @@ import {
   Zap,
   ShieldCheck,
   Split,
+  Flame,
+  Youtube,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -40,6 +42,7 @@ const navItems: NavItem[] = [
   { to: '/queue', icon: ListVideo, label: 'Queue' },
   { to: '/drafts', icon: FileEdit, label: 'Drafts' },
   { to: '/rss-autopilot', icon: Bot, label: 'RSS Auto-Pilot' },
+  { to: '/viral-shorts', icon: Flame, label: 'Viral Shorts' },
   { to: '/ai-autopilot', icon: Sparkles, label: 'AI Image Pilot' },
   { to: '/branding', icon: ShieldCheck, label: 'Branding Presets' },
   { to: '/engagement', icon: MessageSquare, label: 'Auto-Reply Rules' },
@@ -66,6 +69,7 @@ const getPathSegments = (pathname: string): { label: string; path: string }[] =>
       branding: 'Branding Presets',
       engagement: 'Auto-Reply Rules',
       'ab-testing': 'A/B Testing',
+      'viral-shorts': 'Viral Shorts',
       new: 'New',
       edit: 'Edit',
     };
@@ -155,8 +159,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <ul className="space-y-1">
+      <nav className="flex-1 overflow-y-auto px-3 py-4">        <ul className="space-y-1">
           {navItems.map(({ to, icon: Icon, label }) => (
             <li key={to}>
               <NavLink

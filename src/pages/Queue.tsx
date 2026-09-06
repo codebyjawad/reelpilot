@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { ListVideo, ChevronLeft, ChevronRight, Users, ChevronsUpDown, Check } from 'lucide-react';
+import { ListVideo, ChevronLeft, ChevronRight, Users, ChevronsUpDown, Check, LayoutGrid, LayoutList } from 'lucide-react';
 import AppLayout from '@/components/AppLayout';
 import ReelCard from '@/components/ReelCard';
 import EmptyState from '@/components/EmptyState';
@@ -35,6 +35,17 @@ export default function Queue() {
   const { pages, fetchPages } = usePagesStore();
   const [pageDropdownOpen, setPageDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<'grid' | 'list'>(() => {
+    try {
+      return localStorage.getItem('queue-view') === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('queue-view', view); } catch { /* ignore */ }
+  }, [view]);
 
   useEffect(() => {
     fetchReels();
@@ -55,6 +66,20 @@ export default function Queue() {
   }, []);
 
   const totalPages = Math.ceil(total / limit);
+
+  const pageItems = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const set = new Set<number>([1, totalPages, page - 1, page, page + 1]);
+    const sorted = [...set].filter((p) => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+    const out: (number | '...')[] = [];
+    let prev = 0;
+    for (const p of sorted) {
+      if (p - prev > 1) out.push('...');
+      out.push(p);
+      prev = p;
+    }
+    return out;
+  }, [page, totalPages]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: total };
@@ -97,6 +122,40 @@ export default function Queue() {
           </div>
 
           <div className="flex items-center gap-2">
+            <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-700 bg-bg-card">
+              <button
+                onClick={() => setView('grid')}
+                title="Card view"
+                className={cn(
+                  'px-2.5 py-1.5 transition-colors',
+                  view === 'grid' ? 'bg-accent-400/15 text-accent-400' : 'text-slate-400 hover:bg-slate-800/50'
+                )}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setView('list')}
+                title="List view"
+                className={cn(
+                  'px-2.5 py-1.5 transition-colors',
+                  view === 'list' ? 'bg-accent-400/15 text-accent-400' : 'text-slate-400 hover:bg-slate-800/50'
+                )}
+              >
+                <LayoutList className="h-4 w-4" />
+              </button>
+            </div>
+
+            <select
+              value={limit}
+              onChange={(e) => fetchReels({ page: 1, limit: Number(e.target.value) })}
+              className="input-field !py-1.5 !px-2 text-sm w-auto"
+              title="Reels per page"
+            >
+              {[10, 20, 50].map((n) => (
+                <option key={n} value={n}>{n} / page</option>
+              ))}
+            </select>
+
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setPageDropdownOpen((v) => !v)}
@@ -176,11 +235,11 @@ export default function Queue() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className={view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4' : 'space-y-2'}>
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="card p-4">
                 <div className="flex gap-4">
-                  <div className="aspect-[9/16] w-24 rounded-lg shimmer-bg" />
+                  <div className={view === 'grid' ? 'aspect-[9/16] w-24 rounded-lg shimmer-bg' : 'h-14 w-14 rounded-md shimmer-bg'} />
                   <div className="flex-1 space-y-2">
                     <div className="flex justify-between">
                       <div className="h-5 w-3/4 shimmer-bg" />
@@ -205,33 +264,59 @@ export default function Queue() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {reels.map((reel) => (
-                <ReelCard key={reel.id} reel={reel} />
-              ))}
-            </div>
+            {view === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {reels.map((reel) => (
+                  <ReelCard key={reel.id} reel={reel} />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {reels.map((reel) => (
+                  <ReelCard key={reel.id} reel={reel} variant="list" />
+                ))}
+              </div>
+            )}
 
             {totalPages > 1 && (
-              <div className="mt-8 flex items-center justify-center gap-2">
-                <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page <= 1}
-                  className="btn-ghost !px-3 !py-1.5 disabled:opacity-40"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </button>
-                <span className="px-4 text-sm text-slate-400">
-                  Page {page} of {totalPages} · {total} total
-                </span>
-                <button
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page >= totalPages}
-                  className="btn-ghost !px-3 !py-1.5 disabled:opacity-40"
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </button>
+              <div className="mt-8 flex flex-col items-center gap-3">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPage(Math.max(1, page - 1))}
+                    disabled={page <= 1}
+                    className="btn-ghost !px-2.5 !py-1.5 disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+
+                  {pageItems.map((item, i) =>
+                    item === '...' ? (
+                      <span key={`e${i}`} className="px-1 text-slate-500">…</span>
+                    ) : (
+                      <button
+                        key={item}
+                        onClick={() => setPage(item)}
+                        className={cn(
+                          'h-9 w-9 rounded-lg text-sm font-medium transition-colors',
+                          item === page
+                            ? 'bg-accent-400 text-slate-950'
+                            : 'text-slate-400 hover:bg-slate-800'
+                        )}
+                      >
+                        {item}
+                      </button>
+                    )
+                  )}
+
+                  <button
+                    onClick={() => setPage(Math.min(totalPages, page + 1))}
+                    disabled={page >= totalPages}
+                    className="btn-ghost !px-2.5 !py-1.5 disabled:opacity-40"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+                <span className="text-xs text-slate-500">{total} reels · Page {page} of {totalPages}</span>
               </div>
             )}
           </>

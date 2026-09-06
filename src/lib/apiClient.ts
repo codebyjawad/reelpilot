@@ -638,6 +638,128 @@ export const peakTimeApi = {
   },
 };
 
+export interface ViralShortSource {
+  id: number;
+  userId: number;
+  pageId: number;
+  name: string;
+  keywords: string[];
+  minViews: number;
+  publishedWithinDays: number;
+  resultCount: number;
+  targetPlatforms?: TargetPlatform[];
+  useAiCaptions: boolean;
+  autoImport: boolean;
+  intervalHours: number;
+  isActive: boolean;
+  lastPolledAt?: string | null;
+  discoveredCount: number;
+  importedCount: number;
+  page?: { id: number; name: string; avatarUrl: string | null };
+}
+
+export interface ViralShortCandidate {
+  candidateId: string;
+  videoId: string;
+  url: string;
+  title: string;
+  description?: string;
+  channelName?: string;
+  durationSec?: number;
+  viewCount?: number;
+  likeCount?: number;
+  commentCount?: number;
+  publishedAt?: string | null;
+  thumbnailUrl?: string;
+  keywords: string[];
+  viralScore: number;
+  viralLevel: 'trending' | 'hot' | 'viral' | 'superviral';
+  demo: boolean;
+}
+
+export interface ViralShortsImportResult {
+  scheduledCount: number;
+  skippedExistingCount: number;
+  reels: Array<{ id: number; title: string; scheduledAt: string | null; peakTimeLabel: string }>;
+}
+
+export interface ViralSourceSyncResult {
+  candidateCount: number;
+  scheduledCount: number;
+  skippedExistingCount: number;
+}
+
+export interface ViralPeakSlot {
+  datetimeISO: string;
+  score: number;
+}
+
+export const viralShortsApi = {
+  list(): Promise<{ sources: ViralShortSource[] }> {
+    return request<{ sources: ViralShortSource[] }>('/viral-shorts', { method: 'GET' });
+  },
+  create(data: {
+    pageId: number;
+    name: string;
+    keywords: string[];
+    minViews?: number;
+    publishedWithinDays?: number;
+    resultCount?: number;
+    targetPlatforms?: TargetPlatform[];
+    useAiCaptions?: boolean;
+    autoImport?: boolean;
+    intervalHours?: number;
+  }): Promise<{ source: ViralShortSource }> {
+    return request<{ source: ViralShortSource }>('/viral-shorts', { method: 'POST', body: data });
+  },
+  discover(data: {
+    keywords: string[];
+    minViews?: number;
+    publishedWithinDays?: number;
+    resultCount?: number;
+    youtubeApiKey?: string;
+  }): Promise<{ candidates: ViralShortCandidate[] }> {
+    return request<{ candidates: ViralShortCandidate[] }>('/viral-shorts/discover', { method: 'POST', body: data });
+  },
+  importCandidates(data: {
+    pageId: number;
+    candidates: ViralShortCandidate[];
+    targetPlatforms?: TargetPlatform[];
+    useAiCaptions?: boolean;
+  }): Promise<ViralShortsImportResult> {
+    return request<ViralShortsImportResult>('/viral-shorts/import', { method: 'POST', body: data });
+  },
+  sync(id: number): Promise<ViralSourceSyncResult> {
+    return request<ViralSourceSyncResult>(`/viral-shorts/${id}/sync`, { method: 'POST' });
+  },
+  update(id: number, data: {
+    name?: string;
+    keywords?: string[];
+    pageId?: number;
+    minViews?: number;
+    publishedWithinDays?: number;
+    resultCount?: number;
+    targetPlatforms?: TargetPlatform[];
+    useAiCaptions?: boolean;
+    autoImport?: boolean;
+    intervalHours?: number;
+    isActive?: boolean;
+  }): Promise<{ source: ViralShortSource }> {
+    return request<{ source: ViralShortSource }>(`/viral-shorts/${id}`, { method: 'PUT', body: data });
+  },
+  toggle(id: number): Promise<{ source: ViralShortSource }> {
+    return request<{ source: ViralShortSource }>(`/viral-shorts/${id}/toggle`, { method: 'PATCH' });
+  },
+  getPeakSlots(count: number, horizonHours?: number, pageId?: number): Promise<{ count: number; slots: ViralPeakSlot[] }> {
+    const horizon = horizonHours ? `&horizon=${horizonHours}` : '';
+    const page = pageId ? `&pageId=${pageId}` : '';
+    return request<{ count: number; slots: ViralPeakSlot[] }>(`/viral-shorts/peak-slots?count=${count}${horizon}${page}`, { method: 'GET' });
+  },
+  remove(id: number): Promise<void> {
+    return request<void>(`/viral-shorts/${id}`, { method: 'DELETE' });
+  },
+};
+
 export const api = {
   get: <T = any>(url: string) => request<T>(url, { method: 'GET' }),
   post: <T = any>(url: string, data?: any) => request<T>(url, { method: 'POST', body: data }),

@@ -11,11 +11,54 @@ export interface PeakTimesResponse {
     bestNextSlot: PeakTimeSlot;
 }
 
+// ─── Audience timezone ────────────────────────────────────────────────────────
+// The slot model & formatting are anchored to the audience's clock, not the
+// server's. Right now every peak label / datetime is emitted for Asia/Karachi
+// (fixed UTC+5, no DST).
+export const AUDIENCE_TIMEZONE = 'Asia/Karachi';
+const KARACHI_UTC_OFFSET_HOURS = 5;
+
+const audiencePartsFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: AUDIENCE_TIMEZONE,
+    weekday: 'short',
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+});
+
+/** The audience (Karachi) wall-clock components of an instant. */
+const audienceParts = (d: Date): { year: number; month: number; day: number; hour: number; minute: number; second: number } => {
+    const parts = audiencePartsFmt.formatToParts(d);
+    const get = (t: Intl.DateTimeFormatPartTypes): number => Number(parts.find((p) => p.type === t)?.value ?? 0);
+    return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour'), minute: get('minute'), second: get('second') };
+};
+
+const WEEKDAY_INDEX: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+
+/** 0 = Mon … 6 = Sun as seen on the audience clock. */
+const audienceDayIndex = (d: Date): number => {
+    const weekday = audiencePartsFmt.formatToParts(d).find((p) => p.type === 'weekday')?.value ?? 'Sun';
+    return WEEKDAY_INDEX[weekday] ?? 6;
+};
+
+/** Wall-clock components → absolute UTC ISO instant (audience is UTC+5, so UTC = wall − 5h). */
+const wallToISO = (wall: { year: number; month: number; day: number; hour: number; minute: number; second: number }): string =>
+    new Date(Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour - KARACHI_UTC_OFFSET_HOURS, wall.minute, wall.second)).toISOString();
+
+const wallInstant = (wall: Parameters<typeof wallToISO>[0]): number => new Date(wallToISO(wall)).getTime();
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
 /**
  * Calculate top 3 peak viral engagement time slots for short-form content
  */
 export const calculatePeakTimeSlots = async (targetDateStr?: string): Promise<PeakTimesResponse> => {
     const baseDate = targetDateStr ? new Date(targetDateStr) : new Date();
+    const baseParts = audienceParts(baseDate);
 
     // Define peak social engagement hour targets: Morning (9:00 AM), Lunch (1:30 PM), Evening Prime (7:45 PM)
     const peakConfigs = [
@@ -27,23 +70,26 @@ export const calculatePeakTimeSlots = async (targetDateStr?: string): Promise<Pe
     const slots: PeakTimeSlot[] = [];
 
     for (const config of peakConfigs) {
-        const slotDate = new Date(baseDate);
-        slotDate.setHours(config.hour, config.minute, 0, 0);
+        let wall = { ...baseParts, hour: config.hour, minute: config.minute, second: 0 };
 
-        // If time slot has already passed today, advance to tomorrow
-        if (slotDate.getTime() <= Date.now() + 5 * 60 * 1000) {
-            slotDate.setDate(slotDate.getDate() + 1);
+        // If this wall-clock slot has already passed on the audience clock, advance to tomorrow
+        if (wallInstant(wall) <= Date.now() + 5 * 60 * 1000) {
+            const next = new Date(Date.UTC(baseParts.year, baseParts.month - 1, baseParts.day + 1));
+            wall = {
+                year: next.getUTCFullYear(),
+                month: next.getUTCMonth() + 1,
+                day: next.getUTCDate(),
+                hour: config.hour,
+                minute: config.minute,
+                second: 0,
+            };
         }
 
-        // Format for datetime-local input (YYYY-MM-DDTHH:mm)
-        const year = slotDate.getFullYear();
-        const month = String(slotDate.getMonth() + 1).padStart(2, '0');
-        const day = String(slotDate.getDate()).padStart(2, '0');
-        const hours = String(slotDate.getHours()).padStart(2, '0');
-        const mins = String(slotDate.getMinutes()).padStart(2, '0');
-        const isoLocal = `${year}-${month}-${day}T${hours}:${mins}`;
+        // Format for datetime-local input (YYYY-MM-DDTHH:mm) in audience wall time
+        const datetime = `${wall.year}-${pad2(wall.month)}-${pad2(wall.day)}T${pad2(wall.hour)}:${pad2(wall.minute)}`;
 
-        const formattedTime = slotDate.toLocaleString('en-US', {
+        const formattedTime = new Date(wallToISO(wall)).toLocaleString('en-US', {
+            timeZone: AUDIENCE_TIMEZONE,
             weekday: 'short',
             month: 'short',
             day: 'numeric',
@@ -54,7 +100,7 @@ export const calculatePeakTimeSlots = async (targetDateStr?: string): Promise<Pe
 
         slots.push({
             label: config.label,
-            datetime: isoLocal,
+            datetime,
             formattedTime,
             score: config.score,
             rationale: config.rationale,
@@ -135,13 +181,18 @@ export const calculate7DayHeatmapMatrix = async (): Promise<HeatmapMatrixRespons
     };
 
     const now = new Date();
-    const currentDay = (now.getDay() + 6) % 7; // Convert Sun=0 to Mon=0
+    // Weekday & calendar date as seen on the audience (Karachi) clock
+    const currentDay = audienceDayIndex(now);
+    const ba = audienceParts(now);
 
     const matrix: HeatmapCell[][] = [];
     let topPeakCell: HeatmapCell | null = null;
 
     for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
         const row: HeatmapCell[] = [];
+
+        // Calendar date (on the audience clock) for this weekday
+        const dayAnchor = new Date(Date.UTC(ba.year, ba.month - 1, ba.day + ((dayIdx - currentDay + 7) % 7)));
 
         for (let h = 0; h < 24; h++) {
             const base = hourBaseScores[h] || { score: 30, rationale: 'General feed traffic' };
@@ -153,17 +204,15 @@ export const calculate7DayHeatmapMatrix = async (): Promise<HeatmapMatrixRespons
             else if (finalScore >= 75) level = 'high';
             else if (finalScore >= 50) level = 'medium';
 
-            // Calculate target date/time for slotting
-            const targetDate = new Date();
-            const dayOffset = (dayIdx - currentDay + 7) % 7;
-            targetDate.setDate(now.getDate() + dayOffset);
-            targetDate.setHours(h, 0, 0, 0);
-
-            const year = targetDate.getFullYear();
-            const month = String(targetDate.getMonth() + 1).padStart(2, '0');
-            const day = String(targetDate.getDate()).padStart(2, '0');
-            const hoursStr = String(targetDate.getHours()).padStart(2, '0');
-            const datetimeISO = `${year}-${month}-${day}T${hoursStr}:00`;
+            // Absolute (UTC) instant when the audience clock shows hour `h` on this weekday
+            const datetimeISO = wallToISO({
+                year: dayAnchor.getUTCFullYear(),
+                month: dayAnchor.getUTCMonth() + 1,
+                day: dayAnchor.getUTCDate(),
+                hour: h,
+                minute: 0,
+                second: 0,
+            });
 
             const formattedTime = `${days[dayIdx]} ${h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}`;
 

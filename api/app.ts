@@ -32,6 +32,7 @@ import brandingRoutes from './routes/branding.routes.js';
 import engagementRoutes from './routes/engagement.routes.js';
 import abTestRoutes from './routes/abTest.routes.js';
 import youtubeRoutes from './routes/youtube.routes.js';
+import viralShortsRoutes from './routes/viralShorts.routes.js';
 
 const app = express();
 
@@ -87,6 +88,7 @@ app.use('/api/branding', authenticateJWT, brandingRoutes);
 app.use('/api/engagement', authenticateJWT, engagementRoutes);
 app.use('/api/ab-testing', authenticateJWT, abTestRoutes);
 app.use('/api/youtube', authenticateJWT, youtubeRoutes);
+app.use('/api/viral-shorts', authenticateJWT, viralShortsRoutes);
 
 
 // Serve AI-generated images and other uploads statically

@@ -23,6 +23,16 @@ export function resolvePlayableVideoUrl(reel: ReelWithPage | null): string | nul
     return null;
 }
 
+export function extractYoutubeVideoId(url: string | null): string | null {
+    if (!url) return null;
+    const m = url.match(
+        /(?:youtube\.com\/(?:watch\?.*v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/
+    );
+    return m ? m[1] : null;
+}
+
+export const isYoutubeUrl = (url: string | null): boolean => extractYoutubeVideoId(url) !== null;
+
 export const VideoPreviewModal: React.FC<VideoPreviewModalProps> = ({
     isOpen,
     onClose,
@@ -33,6 +43,7 @@ export const VideoPreviewModal: React.FC<VideoPreviewModalProps> = ({
     if (!isOpen || !reel) return null;
 
     const videoUrl = resolvePlayableVideoUrl(reel);
+    const youtubeId = extractYoutubeVideoId(videoUrl);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
@@ -40,7 +51,17 @@ export const VideoPreviewModal: React.FC<VideoPreviewModalProps> = ({
                 
                 {/* Left 9:16 Vertical Video Player Container */}
                 <div className="w-full md:w-80 bg-slate-950 flex flex-col items-center justify-center relative shrink-0 min-h-[380px] p-2 border-b md:border-b-0 md:border-r border-slate-800">
-                    {videoUrl ? (
+                    {youtubeId ? (
+                        <div className="relative w-full h-full aspect-[9/16] rounded-xl overflow-hidden bg-black shadow-xl">
+                            <iframe
+                                src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&color=white`}
+                                title={reel.title}
+                                className="h-full w-full"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                            />
+                        </div>
+                    ) : videoUrl ? (
                         <div className="relative w-full h-full aspect-[9/16] rounded-xl overflow-hidden bg-black shadow-xl flex items-center justify-center">
                             <video
                                 src={videoUrl}

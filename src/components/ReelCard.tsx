@@ -1,21 +1,23 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Pencil, SendHorizontal, RefreshCw, Trash2, Clock, Users, ExternalLink, Share2, Eye } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { formatScheduledAt } from '@/lib/time';
 import type { ReelWithPage } from '@/lib/apiClient';
 import { useReelsStore } from '@/store/reelsStore';
 import { useToast } from '@/store/toastStore';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ShareToGroupModal } from '@/components/ShareToGroupModal';
-import { VideoPreviewModal, resolvePlayableVideoUrl } from '@/components/VideoPreviewModal';
+import { VideoPreviewModal, resolvePlayableVideoUrl, isYoutubeUrl } from '@/components/VideoPreviewModal';
 
 interface ReelCardProps {
   reel: ReelWithPage;
+  variant?: 'grid' | 'list';
 }
 
-export default function ReelCard({ reel }: ReelCardProps) {
+export default function ReelCard({ reel, variant = 'grid' }: ReelCardProps) {
   const { push } = useToast();
   const publishNow = useReelsStore((s) => s.publishNow);
   const retry = useReelsStore((s) => s.retry);
@@ -30,11 +32,13 @@ export default function ReelCard({ reel }: ReelCardProps) {
   const [actionType, setActionType] = useState<'publish' | 'retry'>('publish');
 
   const playableVideoUrl = resolvePlayableVideoUrl(reel);
+  const isYoutubeHover = isYoutubeUrl(playableVideoUrl);
+  const isList = variant === 'list';
   const displayDate = reel.publishedAt || reel.scheduledAt;
   const dateLabel = reel.publishedAt
     ? `Published ${formatDistanceToNow(new Date(reel.publishedAt), { addSuffix: true })}`
     : reel.scheduledAt
-      ? `Scheduled for ${format(new Date(reel.scheduledAt), 'MMM d, h:mm a')}`
+      ? `Scheduled for ${formatScheduledAt(reel.scheduledAt)}`
       : 'No schedule set';
 
   const handlePublishAction = async () => {
@@ -86,17 +90,25 @@ export default function ReelCard({ reel }: ReelCardProps) {
 
   return (
     <>
-      <div className="card p-4 hover:shadow-card-hover transition-all duration-300 animate-fade-in group">
-        <div className="flex gap-4">
+      <div
+        className={cn(
+          'card group animate-fade-in transition-all duration-300',
+          isList ? 'p-2.5' : 'p-4 hover:shadow-card-hover'
+        )}
+      >
+        <div className={cn(isList ? 'flex items-center gap-3' : 'flex gap-4')}>
           <div className="relative shrink-0">
             <div
               onMouseEnter={() => setIsHovering(true)}
               onMouseLeave={() => setIsHovering(false)}
               onClick={() => setVideoPreviewOpen(true)}
-              className="aspect-[9/16] w-24 overflow-hidden rounded-lg bg-slate-800 relative cursor-pointer group/thumb border border-slate-700/50 shadow-md"
+              className={cn(
+                'relative overflow-hidden rounded-lg bg-slate-800 cursor-pointer group/thumb border border-slate-700/50 shadow-md',
+                isList ? 'h-14 w-14 rounded-md' : 'aspect-[9/16] w-24'
+              )}
               title="Click to Preview Video Player"
             >
-              {isHovering && playableVideoUrl ? (
+              {isHovering && playableVideoUrl && !isYoutubeHover ? (
                 <video
                   src={playableVideoUrl}
                   autoPlay
@@ -178,14 +190,14 @@ export default function ReelCard({ reel }: ReelCardProps) {
               </div>
             )}
 
-            {reel.caption && (
+            {reel.caption && !isList && (
               <p className="mt-2 line-clamp-1 text-sm text-slate-400">
                 {reel.caption}
               </p>
             )}
 
             <div className="mt-auto pt-3">
-              <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+              <div className={cn('flex items-center gap-1 transition-opacity', isList ? 'opacity-100' : 'opacity-70 group-hover:opacity-100')}>
                 {reel.status === 'published' && reel.facebookPostUrl && (
                   <a
                     href={reel.facebookPostUrl}

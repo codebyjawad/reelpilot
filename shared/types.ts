@@ -123,6 +123,63 @@ export interface CreateRssFeedRequest {
     intervalHours?: number;
 }
 
+export interface ViralShortSource {
+    id: number;
+    userId: number;
+    pageId: number;
+    name: string;
+    keywords: string[];
+    minViews: number;
+    publishedWithinDays: number;
+    resultCount: number;
+    targetPlatforms: TargetPlatform[];
+    useAiCaptions: boolean;
+    autoImport: boolean;
+    intervalHours: number;
+    isActive: boolean;
+    lastPolledAt?: Date | string | null;
+    discoveredCount: number;
+    importedCount: number;
+    createdAt?: Date;
+    updatedAt?: Date;
+    page?: FacebookPage;
+}
+
+export interface ViralShortCandidate {
+    candidateId: string;
+    videoId: string;
+    url: string;
+    title: string;
+    description?: string;
+    channelName?: string;
+    durationSec?: number;
+    viewCount?: number;
+    likeCount?: number;
+    commentCount?: number;
+    publishedAt?: string | null;
+    thumbnailUrl?: string;
+    keywords: string[];
+    viralScore: number;
+    viralLevel: 'trending' | 'hot' | 'viral' | 'superviral';
+    demo: boolean;
+}
+
+export interface ViralShortsImportResult {
+    scheduledCount: number;
+    skippedExistingCount: number;
+    reels: Array<{ id: number; title: string; scheduledAt: string | null; peakTimeLabel: string }>;
+}
+
+export interface ViralPeakSlot {
+    datetimeISO: string;
+    score: number;
+}
+
+export interface ViralPeakSlotsResult {
+    count: number;
+    slots: ViralPeakSlot[];
+}
+
 export interface UpdateReelRequest {
     pageId?: number;
     title?: string;

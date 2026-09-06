@@ -20,7 +20,8 @@ import {
   Type,
   Image,
 } from 'lucide-react';
-import { format, formatISO, parseISO } from 'date-fns';
+import { formatISO, parseISO } from 'date-fns';
+import { formatScheduledAt } from '@/lib/time';
 import AppLayout from '@/components/AppLayout';
 import FileUploader from '@/components/FileUploader';
 import EmptyState from '@/components/EmptyState';
@@ -287,7 +288,7 @@ export default function EditReel() {
               {currentReel ? `Updating "${currentReel.title}"` : 'Loading reel...'}
               {currentReel?.scheduledAt && (
                 <span className="ml-2 text-cyan-400">
-                  · currently scheduled for {format(parseISO(currentReel.scheduledAt), 'MMM d, h:mm a')}
+                  · currently scheduled for {formatScheduledAt(currentReel.scheduledAt)}
                 </span>
               )}
             </p>

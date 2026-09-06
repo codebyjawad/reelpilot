@@ -14,6 +14,7 @@ import { defineAiPostLogModel, setAiPostLogModelInstance } from '../models/AiPos
 import { defineBrandingPresetModel, setBrandingPresetModelInstance } from '../models/BrandingPreset.model.js';
 import { defineEngagementRuleModel, setEngagementRuleModelInstance } from '../models/EngagementRule.model.js';
 import { defineAbTestModel, setAbTestModelInstance } from '../models/AbTest.model.js';
+import { defineViralSourceModel, setViralSourceModelInstance } from '../models/ViralSource.model.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -121,6 +122,7 @@ export function initModels(seq: Sequelize = sequelize) {
     const BrandingPreset = defineBrandingPresetModel(seq);
     const EngagementRule = defineEngagementRuleModel(seq);
     const AbTest = defineAbTestModel(seq);
+    const ViralSource = defineViralSourceModel(seq);
 
     User.hasMany(FacebookPage, {
         foreignKey: { name: 'userId', allowNull: false, field: 'user_id' },
@@ -188,6 +190,28 @@ export function initModels(seq: Sequelize = sequelize) {
         as: 'page',
     });
 
+    User.hasMany(ViralSource, {
+        foreignKey: { name: 'userId', allowNull: false, field: 'user_id' },
+        as: 'viralSources',
+        onDelete: 'CASCADE',
+        hooks: true,
+    });
+    ViralSource.belongsTo(User, {
+        foreignKey: { name: 'userId', allowNull: false, field: 'user_id' },
+        as: 'user',
+    });
+
+    FacebookPage.hasMany(ViralSource, {
+        foreignKey: { name: 'pageId', allowNull: false, field: 'page_id' },
+        as: 'viralSources',
+        onDelete: 'CASCADE',
+        hooks: true,
+    });
+    ViralSource.belongsTo(FacebookPage, {
+        foreignKey: { name: 'pageId', allowNull: false, field: 'page_id' },
+        as: 'page',
+    });
+
     Reel.hasMany(PublishLog, {
         foreignKey: { name: 'reelId', allowNull: false, field: 'reel_id' },
         as: 'publishLogs',
@@ -232,8 +256,9 @@ export function initModels(seq: Sequelize = sequelize) {
     setBrandingPresetModelInstance(BrandingPreset);
     setEngagementRuleModelInstance(EngagementRule);
     setAbTestModelInstance(AbTest);
+    setViralSourceModelInstance(ViralSource);
 
-    return { User, FacebookPage, FacebookGroup, Reel, PublishLog, RssFeed, AiAutoPilot, AiPostLog, BrandingPreset, EngagementRule, AbTest };
+    return { User, FacebookPage, FacebookGroup, Reel, PublishLog, RssFeed, AiAutoPilot, AiPostLog, BrandingPreset, EngagementRule, AbTest, ViralSource };
 
 }
 

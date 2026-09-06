@@ -34,6 +34,7 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
             where: {
                 userId,
                 status: 'published',
+                publishedAt: { [Op.between]: [todayStart, todayEnd] },
             },
         }),
         ReelModel.count({ where: { userId, status: 'draft' } }),

@@ -4,6 +4,7 @@ import * as reelsService from './reels.service.js';
 import * as rssService from './rss.service.js';
 import * as backgroundWorkerSvc from './backgroundWorker.service.js';
 import * as aiAutoPilotService from './aiAutoPilot.service.js';
+import * as viralShortsService from './viralShorts.service.js';
 
 let runningTask: cron.ScheduledTask | null = null;
 let tickCount = 0;
@@ -20,6 +21,7 @@ export const start = (): void => {
         let processedCount = 0;
         let syncedRssCount = 0;
         let retriedCount = 0;
+        let syncedViralCount = 0;
 
         try {
             await reelsService.processDueReels();
@@ -35,6 +37,12 @@ export const start = (): void => {
                 syncedRssCount++;
             }
 
+            // Run Viral Shorts auto-pilot every 15 minutes (heatmap-scheduled + AI captions)
+            if (tickCount % 15 === 1) {
+                logger.info('Scheduler: running Viral Shorts auto-pilot sync');
+                syncedViralCount = await viralShortsService.pollAllActiveViralSources();
+            }
+
             // Run background auto-retry for failed reels every 30 minutes
             if (tickCount % 30 === 15) {
                 retriedCount = await backgroundWorkerSvc.autoRetryFailedReels();
@@ -45,7 +53,7 @@ export const start = (): void => {
                 `Scheduler tick error: ${e?.message ?? e}`
             );
         } finally {
-            backgroundWorkerSvc.recordTick(processedCount, syncedRssCount, retriedCount);
+            backgroundWorkerSvc.recordTick(processedCount, syncedRssCount, retriedCount, syncedViralCount);
             logger.info(`Scheduler tick done in ${Date.now() - start}ms`);
         }
     });

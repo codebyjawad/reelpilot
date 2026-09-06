@@ -18,6 +18,7 @@ import AiAutoPilot from '@/pages/AiAutoPilot';
 import BrandingSettings from '@/pages/BrandingSettings';
 import EngagementAutomation from '@/pages/EngagementAutomation';
 import AbTesting from '@/pages/AbTesting';
+import ViralShorts from '@/pages/ViralShorts';
 
 export default function App() {
   return (
@@ -103,6 +104,14 @@ export default function App() {
           element={
             <AuthGuard>
               <RssAutoPilot />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/viral-shorts"
+          element={
+            <AuthGuard>
+              <ViralShorts />
             </AuthGuard>
           }
         />
