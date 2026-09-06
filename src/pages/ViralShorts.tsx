@@ -16,6 +16,8 @@ import {
     Play,
     X,
     Pencil,
+    Wand2,
+    Lightbulb,
 } from 'lucide-react';
 import AppLayout from '@/components/AppLayout';
 import { usePagesStore } from '@/store/pagesStore';
@@ -24,7 +26,93 @@ import { viralShortsApi, type TargetPlatform, type ViralShortCandidate, type Vir
 import { cn } from '@/lib/utils';
 import { formatSlotTime, formatSlotsIn } from '@/lib/time';
 
-const SUGGESTED_TOPICS = ['motivation', 'farm animal', 'cooking', 'money', 'fitness', 'ai tool', 'travel', 'coding'];
+interface ViralPreset {
+    id: string;
+    name: string;
+    description: string;
+    keywords: string;
+    minViews: number;
+    publishedWithinDays: number;
+    resultCount: number;
+}
+
+const VIRAL_PRESETS: ViralPreset[] = [
+    {
+        id: 'urdu-ai-stories',
+        name: 'Urdu AI Stories',
+        description: 'Proven AI animated story niche for South-Asian audiences',
+        keywords: 'ulti duniya, AI story in urdu, hindi animated story, talking animals hindi, dog speaking hindi, jungle story AI, 3D animation story hindi, moral story in urdu',
+        minViews: 100000,
+        publishedWithinDays: 30,
+        resultCount: 8,
+    },
+    {
+        id: 'open-loop-clips',
+        name: 'Open-Loop Viral Clips',
+        description: 'Curiosity-gap clips with high retention & shares',
+        keywords: 'wait for it funny, unbelievable moment, instant regret, oops moments, epic fail, satisfying moments, try not to laugh animals, world record attempt',
+        minViews: 50000,
+        publishedWithinDays: 14,
+        resultCount: 8,
+    },
+    {
+        id: 'story-subgenres',
+        name: 'Story Sub-genres',
+        description: 'Niche formats that over-index on Facebook Reels',
+        keywords: 'camping fails, cooking gone wrong, kids funny moments, cat vs dog friendship, dog reacts to owner, farm animals funny',
+        minViews: 50000,
+        publishedWithinDays: 30,
+        resultCount: 8,
+    },
+];
+
+interface ChipOption {
+    value: number;
+    label: string;
+}
+
+const MIN_VIEWS_OPTIONS: ChipOption[] = [
+    { value: 0, label: 'Any' },
+    { value: 5000, label: '5K' },
+    { value: 10000, label: '10K' },
+    { value: 50000, label: '50K' },
+    { value: 100000, label: '100K' },
+    { value: 1000000, label: '1M' },
+];
+
+const PUBLISHED_OPTIONS: ChipOption[] = [
+    { value: 1, label: '24h' },
+    { value: 3, label: '3d' },
+    { value: 7, label: '7d' },
+    { value: 30, label: '30d' },
+    { value: 0, label: 'Anytime' },
+];
+
+const RESULT_OPTIONS: ChipOption[] = [4, 6, 8, 10, 12].map((n) => ({ value: n, label: `${n}` }));
+
+const INTERVAL_OPTIONS: ChipOption[] = [3, 6, 12, 24].map((n) => ({ value: n, label: `${n}h` }));
+
+function ChipControl({ options, value, onChange }: { options: ChipOption[]; value: number; onChange: (v: number) => void }) {
+    return (
+        <div className="flex flex-wrap items-center gap-1.5">
+            {options.map((o) => (
+                <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => onChange(o.value)}
+                    className={cn(
+                        'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                        value === o.value
+                            ? 'bg-accent-400/20 border-accent-400 text-accent-300'
+                            : 'bg-bg-surface border-slate-700 text-slate-400 hover:border-slate-600'
+                    )}
+                >
+                    {o.label}
+                </button>
+            ))}
+        </div>
+    );
+}
 
 const formatCount = (n?: number): string => {
     if (!n || n <= 0) return '—';
@@ -69,6 +157,10 @@ export default function ViralShorts() {
     const [syncingId, setSyncingId] = useState<number | null>(null);
     const [togglingId, setTogglingId] = useState<number | null>(null);
     const [editingSource, setEditingSource] = useState<ViralShortSource | null>(null);
+    const [creatingPresetId, setCreatingPresetId] = useState<string | null>(null);
+    const [aiTopics, setAiTopics] = useState<string[] | null>(null);
+    const [aiTopicsLoading, setAiTopicsLoading] = useState(false);
+    const [aiSeed, setAiSeed] = useState('');
     const [editForm, setEditForm] = useState<{
         name: string;
         keywords: string;
@@ -124,6 +216,69 @@ export default function ViralShorts() {
             if (prev.includes(p)) return prev.length > 1 ? prev.filter((x) => x !== p) : prev;
             return [...prev, p];
         });
+    };
+
+    const applyPreset = (preset: ViralPreset) => {
+        setTopics(preset.keywords);
+        setMinViews(preset.minViews);
+        setPublishedWithinDays(preset.publishedWithinDays);
+        setResultCount(preset.resultCount);
+        const firstKeyword = preset.keywords.split(',')[0].trim();
+        setSaveSourceName(`${preset.name} auto-pilot`);
+        setAutoImport(true);
+        push({
+            title: `Preset applied: ${preset.name}`,
+            description: 'Keywords & thresholds are filled below — click Discover to review and queue picks.',
+            variant: 'success',
+        });
+    };
+
+    const createPresetAutopilot = async (preset: ViralPreset) => {
+        const targetPageId = pageId || pages[0]?.id;
+        if (!targetPageId) {
+            push({ title: 'No page connected', description: 'Select a destination Facebook Page first.', variant: 'error' });
+            return;
+        }
+        setCreatingPresetId(preset.id);
+        try {
+            await viralShortsApi.create({
+                pageId: targetPageId,
+                name: `${preset.name} auto-pilot`,
+                keywords: preset.keywords.split(',').map((k) => k.trim()).filter(Boolean),
+                minViews: preset.minViews,
+                publishedWithinDays: preset.publishedWithinDays,
+                resultCount: preset.resultCount,
+                targetPlatforms,
+                useAiCaptions,
+                autoImport: true,
+                intervalHours,
+            });
+            loadSources();
+            push({
+                title: `🤖 Auto-pilot created: ${preset.name}`,
+                description: `Scanning every ${intervalHours}h — new finds are queued on heat-map peak slots automatically.`,
+                variant: 'success',
+            });
+        } catch (err) {
+            push({ title: 'Could not create auto-pilot', description: err instanceof Error ? err.message : 'Try again', variant: 'error' });
+        } finally {
+            setCreatingPresetId(null);
+        }
+    };
+
+    const handleAiSuggest = async () => {
+        setAiTopicsLoading(true);
+        try {
+            const res = await viralShortsApi.suggestTopics(aiSeed, pageId || pages[0]?.id);
+            setAiTopics(res?.topics || []);
+            if (!res?.topics?.length) {
+                push({ title: 'No ideas generated', description: 'Try again in a moment.', variant: 'info' });
+            }
+        } catch (err) {
+            push({ title: 'AI suggestions failed', description: err instanceof Error ? err.message : 'Try again', variant: 'error' });
+        } finally {
+            setAiTopicsLoading(false);
+        }
     };
 
     const handleDiscover = async () => {
@@ -381,6 +536,94 @@ export default function ViralShorts() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="md:col-span-2">
+                            <label className="form-label">Viral presets (from your page analysis)</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {VIRAL_PRESETS.map((preset) => (
+                                    <div key={preset.id} className="rounded-xl border border-slate-700 bg-bg-surface/60 p-3 flex flex-col gap-2">
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
+                                                <Sparkles className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                                                {preset.name}
+                                            </p>
+                                            <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">{preset.description}</p>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 font-mono leading-relaxed line-clamp-2">
+                                            {preset.keywords.split(', ').slice(0, 4).join(', ')}…
+                                        </p>
+                                        <p className="text-[10px] text-slate-500">
+                                            {preset.minViews >= 1000000 ? '1M+' : preset.minViews >= 1000 ? `${preset.minViews / 1000}K+` : `${preset.minViews}`} views · {preset.publishedWithinDays}d fresh · {preset.resultCount} results
+                                        </p>
+                                        <div className="mt-auto flex items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => applyPreset(preset)}
+                                                className="flex-1 px-2 py-1.5 rounded-lg bg-slate-700/40 hover:bg-slate-600/40 text-slate-200 text-xs font-semibold transition-colors"
+                                                title="Fill the form below with this preset (no source saved yet)"
+                                            >
+                                                Use preset
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => createPresetAutopilot(preset)}
+                                                disabled={creatingPresetId !== null}
+                                                className="flex-1 px-2 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                                                title="Create a recurring auto-pilot source that scans & queues automatically"
+                                            >
+                                                {creatingPresetId === preset.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                Create auto-pilot
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="form-label flex items-center gap-1.5">
+                                <Wand2 className="h-3.5 w-3.5 text-amber-400" />
+                                AI Trend & Topic Suggestions
+                            </label>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <input
+                                    type="text"
+                                    className="input-field flex-1 min-w-[200px]"
+                                    placeholder="Optional angle, e.g. animals, cooking, funny kids…"
+                                    value={aiSeed}
+                                    onChange={(e) => setAiSeed(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAiSuggest(); } }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleAiSuggest}
+                                    disabled={aiTopicsLoading}
+                                    className="btn-ghost inline-flex items-center gap-2"
+                                >
+                                    {aiTopicsLoading ? <Loader2 className="h-4 w-4 animate-spin text-amber-400" /> : <Lightbulb className="h-4 w-4 text-amber-400" />}
+                                    {aiTopicsLoading ? 'Thinking…' : 'Suggest trending topics'}
+                                </button>
+                            </div>
+
+                            {aiTopics && aiTopics.length > 0 && (
+                                <div className="mt-3 space-y-1.5">
+                                    {aiTopics.map((topic, idx) => (
+                                        <div key={idx} className="flex items-start gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setTopics((prev) => (keywordList.includes(topic) ? prev : [prev, topic].filter(Boolean).join(', ')))}
+                                                className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/40 px-3 py-1.5 text-left text-sm text-slate-200 hover:text-amber-200 transition-colors group w-full"
+                                                title="Add to the keywords field below"
+                                            >
+                                                <span className="text-[10px] font-bold text-amber-400 shrink-0">{idx + 1}</span>
+                                                <span className="flex-1 truncate">{topic}</span>
+                                                <span className="text-xs text-slate-500 group-hover:text-amber-300 shrink-0">+ add</span>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="md:col-span-2">
                             <label className="form-label">Keywords / Topic to research</label>
                             <input
                                 type="text"
@@ -389,18 +632,6 @@ export default function ViralShorts() {
                                 value={topics}
                                 onChange={(e) => setTopics(e.target.value)}
                             />
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                                {SUGGESTED_TOPICS.map((t) => (
-                                    <button
-                                        key={t}
-                                        type="button"
-                                        onClick={() => setTopics((prev) => (keywordList.includes(t) ? prev : [prev, t].filter(Boolean).join(', ')))}
-                                        className="px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300 hover:border-rose-500/40 hover:text-rose-300"
-                                    >
-                                        + {t}
-                                    </button>
-                                ))}
-                            </div>
                         </div>
 
                         <div>
@@ -419,34 +650,17 @@ export default function ViralShorts() {
 
                         <div>
                             <label className="form-label">Minimum views</label>
-                            <select className="input-field" value={minViews} onChange={(e) => setMinViews(Number(e.target.value))}>
-                                <option value={0}>Any</option>
-                                <option value={5000}>5K+</option>
-                                <option value={10000}>10K+</option>
-                                <option value={50000}>50K+</option>
-                                <option value={100000}>100K+</option>
-                                <option value={1000000}>1M+</option>
-                            </select>
+                            <ChipControl options={MIN_VIEWS_OPTIONS} value={minViews} onChange={setMinViews} />
                         </div>
 
                         <div>
-                            <label className="form-label">Published within (days)</label>
-                            <select className="input-field" value={publishedWithinDays} onChange={(e) => setPublishedWithinDays(Number(e.target.value))}>
-                                <option value={1}>24 hours</option>
-                                <option value={3}>3 days</option>
-                                <option value={7}>7 days</option>
-                                <option value={30}>30 days</option>
-                                <option value={0}>Any time</option>
-                            </select>
+                            <label className="form-label">Published within</label>
+                            <ChipControl options={PUBLISHED_OPTIONS} value={publishedWithinDays} onChange={setPublishedWithinDays} />
                         </div>
 
                         <div>
                             <label className="form-label">Results per scan</label>
-                            <select className="input-field" value={resultCount} onChange={(e) => setResultCount(Number(e.target.value))}>
-                                {[4, 6, 8, 10, 12].map((n) => (
-                                    <option key={n} value={n}>{n} shorts</option>
-                                ))}
-                            </select>
+                            <ChipControl options={RESULT_OPTIONS} value={resultCount} onChange={setResultCount} />
                         </div>
 
                         <div className="md:col-span-2">
@@ -512,12 +726,8 @@ export default function ViralShorts() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="form-label">Scan every (hours)</label>
-                                    <select className="input-field" value={intervalHours} onChange={(e) => setIntervalHours(Number(e.target.value))}>
-                                        {[3, 6, 12, 24].map((n) => (
-                                            <option key={n} value={n}>{n} hours</option>
-                                        ))}
-                                    </select>
+                                    <label className="form-label">Scan every</label>
+                                    <ChipControl options={INTERVAL_OPTIONS} value={intervalHours} onChange={setIntervalHours} />
                                 </div>
                                 <div className="flex items-end pb-1">
                                     <label className="flex items-center gap-2 cursor-pointer">
@@ -875,59 +1085,38 @@ export default function ViralShorts() {
 
                             <div>
                                 <label className="form-label">Minimum views</label>
-                                <select
-                                    className="input-field"
+                                <ChipControl
+                                    options={MIN_VIEWS_OPTIONS}
                                     value={editForm.minViews}
-                                    onChange={(e) => setEditForm((f) => (f ? { ...f, minViews: Number(e.target.value) } : f))}
-                                >
-                                    <option value={0}>Any</option>
-                                    <option value={5000}>5K+</option>
-                                    <option value={10000}>10K+</option>
-                                    <option value={50000}>50K+</option>
-                                    <option value={100000}>100K+</option>
-                                    <option value={1000000}>1M+</option>
-                                </select>
+                                    onChange={(v) => setEditForm((f) => (f ? { ...f, minViews: v } : f))}
+                                />
                             </div>
 
                             <div>
-                                <label className="form-label">Published within (days)</label>
-                                <select
-                                    className="input-field"
+                                <label className="form-label">Published within</label>
+                                <ChipControl
+                                    options={PUBLISHED_OPTIONS}
                                     value={editForm.publishedWithinDays}
-                                    onChange={(e) => setEditForm((f) => (f ? { ...f, publishedWithinDays: Number(e.target.value) } : f))}
-                                >
-                                    <option value={1}>24 hours</option>
-                                    <option value={3}>3 days</option>
-                                    <option value={7}>7 days</option>
-                                    <option value={30}>30 days</option>
-                                    <option value={0}>Any time</option>
-                                </select>
+                                    onChange={(v) => setEditForm((f) => (f ? { ...f, publishedWithinDays: v } : f))}
+                                />
                             </div>
 
                             <div>
                                 <label className="form-label">Results per scan</label>
-                                <select
-                                    className="input-field"
+                                <ChipControl
+                                    options={RESULT_OPTIONS}
                                     value={editForm.resultCount}
-                                    onChange={(e) => setEditForm((f) => (f ? { ...f, resultCount: Number(e.target.value) } : f))}
-                                >
-                                    {[4, 6, 8, 10, 12].map((n) => (
-                                        <option key={n} value={n}>{n} shorts</option>
-                                    ))}
-                                </select>
+                                    onChange={(v) => setEditForm((f) => (f ? { ...f, resultCount: v } : f))}
+                                />
                             </div>
 
                             <div>
-                                <label className="form-label">Scan every (hours)</label>
-                                <select
-                                    className="input-field"
+                                <label className="form-label">Scan every</label>
+                                <ChipControl
+                                    options={INTERVAL_OPTIONS}
                                     value={editForm.intervalHours}
-                                    onChange={(e) => setEditForm((f) => (f ? { ...f, intervalHours: Number(e.target.value) } : f))}
-                                >
-                                    {[3, 6, 12, 24].map((n) => (
-                                        <option key={n} value={n}>{n} hours</option>
-                                    ))}
-                                </select>
+                                    onChange={(v) => setEditForm((f) => (f ? { ...f, intervalHours: v } : f))}
+                                />
                             </div>
                         </div>
 

@@ -9,6 +9,7 @@ router.use(authenticateJWT, requireAuth);
 
 router.get('/', wrapAsync(viralShortsController.listSources));
 router.post('/', wrapAsync(viralShortsController.createSource));
+router.post('/suggest-topics', wrapAsync(viralShortsController.suggestTopics));
 router.post('/discover', wrapAsync(viralShortsController.discoverNow));
 router.post('/import', wrapAsync(viralShortsController.importCandidates));
 router.get('/peak-slots', wrapAsync(viralShortsController.getPeakSlots));

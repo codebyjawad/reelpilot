@@ -721,6 +721,9 @@ export const viralShortsApi = {
   }): Promise<{ candidates: ViralShortCandidate[] }> {
     return request<{ candidates: ViralShortCandidate[] }>('/viral-shorts/discover', { method: 'POST', body: data });
   },
+  suggestTopics(seed?: string, pageId?: number): Promise<{ topics: string[] }> {
+    return request<{ topics: string[] }>('/viral-shorts/suggest-topics', { method: 'POST', body: { seed: seed || '', pageId } });
+  },
   importCandidates(data: {
     pageId: number;
     candidates: ViralShortCandidate[];

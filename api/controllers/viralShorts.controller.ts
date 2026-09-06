@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { getViralSourceModel } from '../models/ViralSource.model.js';
 import { getFacebookPageModel } from '../models/FacebookPage.model.js';
 import * as viralShortsService from '../services/viralShorts.service.js';
+import { suggestTopicsForPage, suggestViralTopics } from '../services/ai.service.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
 
 const parseStringArray = (value: any): string[] => {
@@ -62,6 +63,20 @@ export const createSource = async (req: Request, res: Response): Promise<void> =
         success: true,
         data: { source },
     });
+};
+
+export const suggestTopics = async (req: Request, res: Response): Promise<void> => {
+    const seed = typeof req.body?.seed === 'string' ? req.body.seed.slice(0, 200) : '';
+    const pageId = req.body?.pageId ? Number(req.body.pageId) : undefined;
+
+    let pageName = 'Viral Videos';
+    if (pageId) {
+        const page = await getFacebookPageModel().findOne({ where: { id: pageId }, attributes: ['name'] });
+        if (page) pageName = page.name;
+    }
+
+    const topics = await suggestViralTopics(seed, pageName);
+    res.status(200).json({ success: true, data: { topics, pageName } });
 };
 
 export const discoverNow = async (req: Request, res: Response): Promise<void> => {
@@ -199,6 +214,7 @@ export const deleteSource = async (req: Request, res: Response): Promise<void> =
 export default {
     listSources,
     createSource,
+    suggestTopics,
     discoverNow,
     importCandidates,
     syncSource,

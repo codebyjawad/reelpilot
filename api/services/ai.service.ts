@@ -2,6 +2,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { createRequire } from 'module';
 import { logger } from '../utils/logger.js';
 import { config } from '../config/index.js';
 
@@ -360,6 +361,127 @@ Return JSON strictly in this format:
         `Inspirational Moments`,
         `Did You Know? Facts & Hacks`,
     ];
+};
+
+let _agentAiConfig: { apiKey?: string; model?: string; baseUrl?: string } | null = null;
+
+function getAgentAiConfig(): { apiKey?: string; model?: string; baseUrl?: string } {
+    if (_agentAiConfig) return _agentAiConfig;
+    try {
+        const require = createRequire(import.meta.url);
+        const agentConfig = require('/root/projects/agents/config.js');
+        _agentAiConfig = agentConfig?.ai || {};
+    } catch {
+        _agentAiConfig = {};
+    }
+    return _agentAiConfig;
+}
+
+const VIRAL_TRENDING_SEEDS = [
+    'ultra satisfying moments', 'impossible comeback', 'pets doing something hilarious',
+    'wait for it shock ending', 'world record attempt fails', 'instant karma',
+    'rare animal encounter', 'funny kids', 'extreme water slide', 'mind blown facts',
+    'oddly satisfying cooking', 'mother nature surprising deal', 'glow up transformation',
+    'street food secrets', 'emotional reunion', 'science experiment gone right',
+];
+
+/**
+ * Generate 8 trending short-video keyword ideas, using Gemini when available
+ * and the agent AI provider (opencode-zen) otherwise.
+ */
+export const suggestViralTopics = async (
+    seed: string,
+    pageName: string
+): Promise<string[]> => {
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const apiKey = geminiKey || getAgentAiConfig().apiKey;
+    const seedText = seed.trim();
+
+    // 1. Gemini
+    if (geminiKey) {
+        try {
+            const prompt = `You are a short-form video trend strategist. Based on the theme "${pageName}"${seedText ? ` and the angle "${seedText}"` : ''}, suggest 8 high-retention viral short-video keyword ideas (short phrases a content creator would search on YouTube Shorts to find clips to repost).
+Return JSON strictly: {"topics":["topic 1", ... 8 topics]}`;
+            const res = await axios.post(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+                { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } },
+                { timeout: 20000 }
+            );
+            const jsonText = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (jsonText) {
+                const parsed = JSON.parse(jsonText.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim());
+                if (Array.isArray(parsed.topics) && parsed.topics.length > 0) return parsed.topics.slice(0, 8);
+            }
+        } catch {
+            // fall through to agent provider
+        }
+    }
+
+    // 2. Agent AI provider (opencode-zen / deepseek)
+    if (apiKey) {
+        const cfg = getAgentAiConfig();
+        const baseUrl = cfg.baseUrl || 'https://opencode.ai/zen/v1';
+        const models = [
+            (cfg.model as string) || 'deepseek-v4-flash-free',
+            'nemotron-3-ultra-free',
+            'mimo-v2.5-free',
+            'gemini-3.5-flash-lite',
+            'claude-haiku-4-5',
+        ];
+        const system = 'You are a short-form video trend strategist. Reply with only valid JSON.';
+        const user = `Based on the theme "${pageName}"${seedText ? ` and the angle "${seedText}"` : ''}, suggest 8 high-retention viral short-video keyword ideas (short search phrases for YouTube Shorts, real-world clips a creator reposts). Return exactly: {"topics":["...", ... 8 items]}`;
+
+        for (const model of models) {
+            try {
+                const payload: any = {
+                    model,
+                    temperature: 0.9,
+                    messages: [
+                        { role: 'system', content: system },
+                        { role: 'user', content: user },
+                    ],
+                    response_format: { type: 'json_object' },
+                };
+                const res = await axios.post(
+                    `${baseUrl.replace(/\/$/, '')}/chat/completions`,
+                    payload,
+                    {
+                        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                        timeout: 30000,
+                    }
+                );
+                const msg = res.data?.choices?.[0]?.message;
+                let content = typeof msg?.content === 'string' ? msg.content : '';
+                if (Array.isArray(msg?.content)) content = msg.content.map((p: any) => p?.text || '').join('');
+                if (content) {
+                    const cleaned = String(content).replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+                    const start = cleaned.indexOf('{');
+                    const end = cleaned.lastIndexOf('}');
+                    const jsonText = start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
+                    const parsed = JSON.parse(jsonText);
+                    if (Array.isArray(parsed.topics) && parsed.topics.length > 0) return parsed.topics.slice(0, 8);
+                }
+            } catch (err: any) {
+                logger.warn(`[AI Topics] Agent model "${model}" failed: ${err?.message}`);
+            }
+        }
+    }
+
+    // 3. Fallback: seed-aware guidelines so suggestions stay relevant without an API key
+    const results = [...VIRAL_TRENDING_SEEDS];
+    if (seedText) {
+        const stem = seedText.replace(/[^a-z0-9\s]/gi, '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const unique = [...new Set(stem)].join(' ');
+        const ck = (prefix: string, suffix = '') => {
+            const pref = prefix.split(/\s+/).filter((w) => !unique.includes(w)).join(' ');
+            return `${pref} ${unique}${suffix}`.replace(/\s+/g, ' ').trim();
+        };
+        const combos = [ck('funny'), ck('crazy'), ck('ultra satisfying'), ck('', ' moments'), ck('', ' that went wrong'), ck('best', ' compilation'), ck('unbelievable'), ck('wait for it')];
+        results.splice(0, combos.length - 1, ...combos);
+    }
+    const pageStem = pageName === 'Viral Videos' ? 'viral' : pageName.replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'viral';
+    if (!results.some((t) => t.toLowerCase().includes(pageStem))) results[results.length - 1] = `trending ${pageStem} clips`;
+    return results.slice(0, 8);
 };
 
 export interface AiImagePostResult {
